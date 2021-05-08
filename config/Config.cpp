@@ -52,6 +52,7 @@ const							std::string &Config::Section::throw_or_not(const std::string &Key) c
 	auto find_res = content.find(Key);
 	if(find_res == content.end())
 		throw std::out_of_range("Not found parameter");
+	std::string a(find_res->second);
 	return find_res->second;
 }
 
