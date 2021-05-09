@@ -31,7 +31,7 @@ enum state {
 class Bridge {
 	int																			fd_client_proxy_;
 	int																			fd_proxy_db_;
-	uint8_t																	cur_state_;
+	enum state															cur_state_;
 	char*																		buf_ = new char[MAX_DATA_SIZE];
 	ssize_t																	package_size_ = 0;
 	int																			outfile_;
@@ -61,6 +61,12 @@ public:
 			handler();
 	}
 
+	int					getFdClientProxy()	const { return fd_client_proxy_; }
+	int					getFdProxyDb()			const { return fd_proxy_db_; }
+	enum state	getCurState()				const { return cur_state_; }
+
+private:
+
 	void	send_to_db() {
 		logger();
 		if(send(fd_proxy_db_, buf_, package_size_, 0) < 0) {
@@ -68,6 +74,7 @@ public:
 			return;
 		}
 		cur_state_ = state::READ_FROM_DB;
+		handler = std::bind(&Bridge::read_from_db, this);
 		clear_buf();
 	}
 
@@ -79,6 +86,7 @@ public:
 			cur_state_ = state::FINALL;
 		}
 		else {
+			handler = std::bind(&Bridge::send_to_db, this);
 			cur_state_ = state::SEND_TO_DB;
 		}
 	}
@@ -88,6 +96,7 @@ public:
 			cur_state_ = state::FINALL;
 			return ;
 		}
+		handler = std::bind(&Bridge::read_from_client, this);
 		cur_state_ = state::READ_FROM_CLIENT;
 		clear_buf();
 	};
@@ -99,14 +108,10 @@ public:
 			cur_state_ = state::FINALL;
 			return ;
 		}
+		handler = std::bind(&Bridge::send_to_client, this);
 		cur_state_ = state::SEND_TO_CLIENT;
 	}
 
-	int			getFdClientProxy()	const { return fd_client_proxy_; }
-	int			getFdProxyDb()			const { return fd_proxy_db_; }
-	uint8_t	getCurState()				const { return cur_state_; }
-
-private:
 	void	clear_buf() {
 		std::memset(buf_, '\0', package_size_);
 		package_size_ = 0;
@@ -137,23 +142,20 @@ public:
 	}
 
 	[[noreturn]] void run_server() {
+		bool is_any_set;
 		while (true) {
 			manage_client_fd();
 			select(max_fd_ + 1, &read_fds_, &write_fds_, nullptr, nullptr);
 			create_client();
-			for (auto it = bridges_.begin(); it != bridges_.end() ; ) {
-				if (FD_ISSET((*it)->getFdClientProxy(), &read_fds_) && (*it)->getCurState() == state::READ_FROM_CLIENT) {
-					(*it)->read_from_client();
-				}
-				else if (FD_ISSET((*it)->getFdProxyDb(), &write_fds_) && (*it)->getCurState() == state::SEND_TO_DB) {
-					(*it)->send_to_db();
-				}
-				else if (FD_ISSET((*it)->getFdProxyDb(), &read_fds_) && (*it)->getCurState() == state::READ_FROM_DB) {
-					(*it)->read_from_db();
-				}
-				else if (FD_ISSET((*it)->getFdClientProxy(), &write_fds_) && (*it)->getCurState() == state::SEND_TO_CLIENT) {
-					(*it)->send_to_client();
-				}
+			auto it = bridges_.begin();
+			while (it != bridges_.end()) {
+
+				is_any_set =			FD_ISSET((*it)->getFdClientProxy(), &read_fds_)	||
+													FD_ISSET((*it)->getFdProxyDb(), &write_fds_)			||
+													FD_ISSET((*it)->getFdProxyDb(), &read_fds_)			||
+													FD_ISSET((*it)->getFdClientProxy(), &write_fds_);
+
+				(*it)->caller(is_any_set);
 				if ((*it)->getCurState() == state::FINALL) {
 					it = bridges_.erase(it);
 				}
@@ -165,7 +167,8 @@ public:
 	}
 private:
 
-	void manage_client_fd() {
+
+	void	manage_client_fd() {
 		FD_ZERO(&read_fds_);
 		FD_ZERO(&write_fds_);
 		FD_SET(listen_fd_, &read_fds_);
