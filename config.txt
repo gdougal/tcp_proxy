@@ -4,3 +4,5 @@ port:   8000
 #DB
 ip:		127.0.0.1
 port:   5432
+#LOGS_PATH
+logs/
