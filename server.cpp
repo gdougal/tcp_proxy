@@ -18,7 +18,7 @@
 //#include <arpa/inet.h>
 #include <list>
 #include <array>
-#define	MAX_DATA_SIZE 508
+#define	MAX_DATA_SIZE 10000
 
 enum state {
 	READ_FROM_CLIENT,
@@ -32,75 +32,93 @@ class Bridge {
 	int																			fd_client_proxy_;
 	int																			fd_proxy_db_;
 	uint8_t																	cur_state_;
-	std::vector<uint8_t>										buf;
+	char																		buf_[MAX_DATA_SIZE];
 	ssize_t																	package_size_ = 0;
 
 public:
 	Bridge(sockaddr_in &info, int client_to_proxy) :
-		fd_client_proxy_(client_to_proxy) {
+		fd_client_proxy_(client_to_proxy),
+		package_size_(0) {
 		fd_proxy_db_ = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 		if((connect(fd_proxy_db_, (sockaddr *)&info, sizeof(info))) == -1) {
 			std::cerr << "Client cant`t accept client" << std::endl;
 		}
+//		fcntl(fd_proxy_db_, F_SETFL, O_NONBLOCK);
+//		fcntl(fd_client_proxy_, F_SETFL, O_NONBLOCK);
 		cur_state_ = state::READ_FROM_CLIENT;
-		buf.reserve(MAX_DATA_SIZE);
+		clear_buf();
+	}
+
+	virtual ~Bridge() {
+		close(fd_proxy_db_);
+		close(fd_client_proxy_);
 	}
 
 	void	logger() {
 		std::cout << "Logger" << std::endl;
-		std::cout << buf.data() << std::endl;
+		for (int i = 0; i < package_size_; ++i) {
+			std::cout << buf_[i];
+		}
+		std::cout << std::endl;
 	}
 
 	void	send_to_db() {
-		if(send(fd_proxy_db_, buf.data(), package_size_, 0) > 0) {
-			cur_state_ = state::READ_FROM_DB;
+		std::cout << "Sending to DB" << std::endl;
+		logger();
+		if(send(fd_proxy_db_, buf_, package_size_, 0) < 0) {
+			cur_state_ = state::FINALL;
+			return;
 		}
+		cur_state_ = state::READ_FROM_DB;
+		clear_buf();
 	}
 
 	void	read_from_client() {
-		uint8_t	_buf[MAX_DATA_SIZE];
 		std::cout << "Start_read_from_client" << std::endl;
-		package_size_ = recv(fd_client_proxy_, _buf, MAX_DATA_SIZE - 1, 0);
+		clear_buf();
+		package_size_ = recv(fd_client_proxy_, buf_, MAX_DATA_SIZE - 1, 0);
 		if (package_size_ <= 0) {
 			std::cerr << "Cant`t recv from client" << std::endl;
 			cur_state_ = state::FINALL;
 		}
 		else {
-			buf = std::vector(_buf, _buf + package_size_);
 			std::cout << "After_read_from_client" << std::endl;
 			cur_state_ = state::SEND_TO_DB;
-			logger();
-			send_to_db();
+			std::cout << std::endl;
 		}
 	}
 
 	void	send_to_client() {
 		std::cout << "Send_to_client" << std::endl;
-		if(send(fd_proxy_db_, buf.data(), package_size_, 0) > 0) {
+		logger();
+		if (send(fd_client_proxy_, buf_, package_size_, 0) < 0) {
 			cur_state_ = state::FINALL;
+			return ;
 		}
+		cur_state_ = state::READ_FROM_CLIENT;
+		clear_buf();
 	};
 
 	void	read_from_db() {
-		buf.clear();
-		uint8_t	_buf[MAX_DATA_SIZE];
 		std::cout << "Read_form_DB" << std::endl;
-		package_size_ = recv(fd_proxy_db_, _buf, MAX_DATA_SIZE - 1, 0);
+		package_size_ = recv(fd_proxy_db_, buf_, MAX_DATA_SIZE - 1, 0);
 		if (package_size_ <= 0) {
 			std::cerr << "Cant`t recv from db" << std::endl;
 			cur_state_ = state::FINALL;
+			return ;
 		}
-		else {
-			buf = std::vector(_buf, _buf + package_size_);
-			std::cout << "After_form_DB" << std::endl;
-			cur_state_ = state::SEND_TO_CLIENT;
-			send_to_client();
-		}
+		cur_state_ = state::SEND_TO_CLIENT;
 	}
 
 	int			getFdClientProxy()	const { return fd_client_proxy_; }
 	int			getFdProxyDb()			const { return fd_proxy_db_; }
-	uint8_t	getCurState()			const { return cur_state_; }
+	uint8_t	getCurState()				const { return cur_state_; }
+
+private:
+	void	clear_buf() {
+		std::memset(buf_, '\0', package_size_);
+		package_size_ = 0;
+	}
 };
 
 
@@ -114,16 +132,24 @@ public:
 
 	[[noreturn]] void run_server() {
 		while (true) {
+			std::cout << "START CYCLE" << std::endl;
 			manage_client_fd();
 			select(max_fd_ + 1, &read_fds_, &write_fds_, nullptr, nullptr);
+			std::cout << "AFTER SELECT" << std::endl;
 			create_client();
-
 			for (auto it = bridges_.begin(); it != bridges_.end() ; ) {
+				std::cout << "ITS FOR BABY" << std::endl;
 				if (FD_ISSET((*it)->getFdClientProxy(), &read_fds_) && (*it)->getCurState() == state::READ_FROM_CLIENT) {
 					(*it)->read_from_client();
 				}
+				else if (FD_ISSET((*it)->getFdProxyDb(), &write_fds_) && (*it)->getCurState() == state::SEND_TO_DB) {
+					(*it)->send_to_db();
+				}
 				else if (FD_ISSET((*it)->getFdProxyDb(), &read_fds_) && (*it)->getCurState() == state::READ_FROM_DB) {
 					(*it)->read_from_db();
+				}
+				else if (FD_ISSET((*it)->getFdClientProxy(), &write_fds_) && (*it)->getCurState() == state::SEND_TO_CLIENT) {
+					(*it)->send_to_client();
 				}
 				if ((*it)->getCurState() == state::FINALL) {
 					it = bridges_.erase(it);
@@ -132,7 +158,6 @@ public:
 					++it;
 				}
 			}
-
 		}
 	}
 private:
@@ -149,20 +174,23 @@ private:
 					FD_SET(item->getFdClientProxy(), &read_fds_);
 					max_fd_ = std::max(listen_fd_, item->getFdClientProxy());
 					std::cout << "1" << std::endl;
-//						break;
-//				case state::SEND_TO_CLIENT:
-//					FD_SET(item->getFdClientProxy(), &write_fds_);
-						break;
+					break;
+				case state::SEND_TO_CLIENT:
+					FD_SET(item->getFdClientProxy(), &write_fds_);
+					max_fd_ = std::max(listen_fd_, item->getFdClientProxy());
+					std::cout << "2" << std::endl;
+					break;
 				case state::READ_FROM_DB:
 					FD_SET(item->getFdProxyDb(), &read_fds_);
 					max_fd_ = std::max(listen_fd_, item->getFdProxyDb());
-					std::cout << "2" << std::endl;
-//						break;
-//				case state::SEND_TO_DB:
-//					FD_SET(item->getFdProxyDb(), &write_fds_);
-						break;
+					std::cout << "3" << std::endl;
+					break;
+				case state::SEND_TO_DB:
+					FD_SET(item->getFdProxyDb(), &write_fds_);
+					max_fd_ = std::max(listen_fd_, item->getFdProxyDb());
+					std::cout << "4" << std::endl;
+					break;
 			}
-			std::cout << "3" << std::endl;
 		}
 		std::cout << "Mange_end" << std::endl;
 	}
@@ -174,7 +202,9 @@ private:
 				std::cerr << "Cant`t accept client" << std::endl;
 				return;
 			}
+			fcntl(new_client_fd, F_SETFL, O_NONBLOCK);
 			bridges_.emplace_back(new Bridge(client_mask_, new_client_fd));
+			std::cout << "Client was accepted successful!" << std::endl;
 		}
 	}
 
