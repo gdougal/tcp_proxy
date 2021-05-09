@@ -34,23 +34,31 @@ class Bridge {
 	uint8_t																	cur_state_;
 	char*																		buf_ = new char[MAX_DATA_SIZE];
 	ssize_t																	package_size_ = 0;
-	std::ifstream														log_file();
+	int																			outfile_;
+	std::function<void()>										handler;
 public:
-	Bridge(sockaddr_in &info, int client_to_proxy) :
+	Bridge(sockaddr_in &info, int client_to_proxy, int file) :
 		fd_client_proxy_(client_to_proxy),
-		package_size_(0) {
+		package_size_(0),
+		outfile_(file) {
 		fd_proxy_db_ = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 		if((connect(fd_proxy_db_, (sockaddr *)&info, sizeof(info))) == -1) {
 			std::cerr << "Client cant`t accept client" << std::endl;
 		}
 		cur_state_ = state::READ_FROM_CLIENT;
 		clear_buf();
+		handler = std::bind(&Bridge::read_from_client, this);
 	}
 
 	virtual ~Bridge() {
 		close(fd_proxy_db_);
 		close(fd_client_proxy_);
 		delete[] buf_;
+	}
+
+	void		caller(bool a) {
+		if (a == true)
+			handler();
 	}
 
 	void	send_to_db() {
@@ -72,7 +80,6 @@ public:
 		}
 		else {
 			cur_state_ = state::SEND_TO_DB;
-			std::cout << std::endl;
 		}
 	}
 
@@ -105,10 +112,14 @@ private:
 		package_size_ = 0;
 	}
 	void	logger() {
-		for (int i = 0; i < package_size_; ++i) {
-			std::cout << buf_[i];
+		uint len = (uint(buf_[1]) << 24) | (uint(buf_[2]) << 16) | (uint(buf_[3]) << 8) | (uint(buf_[4])) - 5;
+		if (buf_[0] == 'Q' && len < package_size_) {
+			std::string	meta("-- QUERY SIZE: ");
+			meta += std::to_string(len) + "\n";
+			write(outfile_, meta.c_str(), meta.size());
+			write(outfile_, &buf_[5], len);
+			write(outfile_, "\n", 1);
 		}
-		std::cout << std::endl;
 	}
 };
 
@@ -118,6 +129,7 @@ public:
 	Server(const Config &cfg) {
 		create_listen_socket(cfg);
 		create_db_mask(cfg);
+		logfile_ = open(cfg.getSection("LOGS_PATH").getStringVal("file").c_str(), O_CREAT | O_TRUNC | O_WRONLY, 0644);
 	}
 
 	virtual ~Server() {
@@ -188,7 +200,7 @@ private:
 				return;
 			}
 			fcntl(new_client_fd, F_SETFL, O_NONBLOCK);
-			bridges_.emplace_back(new Bridge(client_mask_, new_client_fd));
+			bridges_.emplace_back(new Bridge(client_mask_, new_client_fd, logfile_));
 		}
 	}
 
@@ -238,6 +250,7 @@ private:
 	fd_set															write_fds_;
 	sockaddr_in													client_mask_;
 	std::list<std::shared_ptr<Bridge> >	bridges_;
+	int																	logfile_;
 };
 
 
