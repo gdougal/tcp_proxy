@@ -4,5 +4,10 @@ set(CMAKE_CXX_STANDARD 17)
 
 set(EXECUTABLE_NAME "server")
 
-add_executable(${EXECUTABLE_NAME} server.cpp config/Config.cpp)
-target_include_directories(${EXECUTABLE_NAME} PUBLIC config)
+add_executable(${EXECUTABLE_NAME}
+        srcs/main.cpp
+        srcs/config/Config.cpp
+        srcs/Server.cpp
+        srcs/Bridge.cpp
+        )
+target_include_directories(${EXECUTABLE_NAME} PUBLIC srcs/config srcs)
