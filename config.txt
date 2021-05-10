@@ -5,4 +5,4 @@ port:   8000
 ip:		127.0.0.1
 port:   5432
 #LOGS_PATH
-file: logs/logfile.sql
+file: logfile.sql
