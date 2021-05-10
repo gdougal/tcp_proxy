@@ -175,23 +175,29 @@ private:
 		max_fd_ = listen_fd_;
 		for (auto &item: bridges_) {
 			switch (item->getCurState()) {
+				case state::FINALL:
+					return;
 				case state::READ_FROM_CLIENT:
 					FD_SET(item->getFdClientProxy(), &read_fds_);
-					max_fd_ = std::max(listen_fd_, item->getFdClientProxy());
+//					max_fd_ = std::max(listen_fd_, item->getFdClientProxy());
 					break;
 				case state::SEND_TO_CLIENT:
 					FD_SET(item->getFdClientProxy(), &write_fds_);
-					max_fd_ = std::max(listen_fd_, item->getFdClientProxy());
+//					max_fd_ = std::max(listen_fd_, item->getFdClientProxy());
 					break;
 				case state::READ_FROM_DB:
 					FD_SET(item->getFdProxyDb(), &read_fds_);
-					max_fd_ = std::max(listen_fd_, item->getFdProxyDb());
+//					max_fd_ = std::max(listen_fd_, item->getFdProxyDb());
 					break;
 				case state::SEND_TO_DB:
 					FD_SET(item->getFdProxyDb(), &write_fds_);
-					max_fd_ = std::max(listen_fd_, item->getFdProxyDb());
+//					max_fd_ = std::max(listen_fd_, item->getFdProxyDb());
 					break;
 			}
+			max_fd_ = std::max(
+							*std::max_element(write_fds_.fds_bits, write_fds_.fds_bits + bridges_.size()),
+							*std::max_element(read_fds_.fds_bits, read_fds_.fds_bits + bridges_.size())
+							);
 		}
 	}
 
