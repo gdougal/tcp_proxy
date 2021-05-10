@@ -1,0 +1,1 @@
+/usr/bin/c++ -g CMakeFiles/server.dir/srcs/main.cpp.o CMakeFiles/server.dir/srcs/config/Config.cpp.o CMakeFiles/server.dir/srcs/Server.cpp.o CMakeFiles/server.dir/srcs/Bridge.cpp.o -o server 

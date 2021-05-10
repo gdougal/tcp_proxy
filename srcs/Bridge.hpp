@@ -12,6 +12,8 @@
 #include <cstring>
 #include <csignal>
 #include <vector>
+#include <functional>
+#include <memory>
 #define PORTION_SIZE	512
 
 enum state {
@@ -23,20 +25,20 @@ enum state {
 };
 
 class Bridge {
-	enum state															cur_state_;
-	int																			fd_client_proxy_;
-	int																			fd_proxy_db_;
-	int																			outfile_;
-	std::vector<char>												bufer_;
-	std::function<void()>										handler_;
-	std::shared_ptr<char> 									tmp_;
+	enum state				cur_state_;
+	int						fd_client_proxy_;
+	int						fd_proxy_db_;
+	int						outfile_;
+	std::vector<char>		bufer_;
+	std::function<void()>	handler_;
+	std::shared_ptr<char> 	tmp_;
 public:
 	Bridge(sockaddr_in &info, int client_to_proxy, int file);
 	virtual ~Bridge();
 	void				caller(bool a);
 	int					getFdClientProxy()	const;
-	int					getFdProxyDb()			const;
-	enum state	getCurState()				const;
+	int					getFdProxyDb()		const;
+	enum state			getCurState()		const;
 
 private:
 

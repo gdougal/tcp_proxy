@@ -69,7 +69,6 @@ void Bridge::read_from_db() {
 	while (cur_read == PORTION_SIZE) {
 		cur_read = recv(fd_proxy_db_, tmp_.get(), PORTION_SIZE, 0);
 		if (cur_read <= 0) {
-			std::cerr << "Cant`t recv from db" << std::endl;
 			cur_state_ = state::FINALL;
 			return;
 		}
@@ -82,11 +81,6 @@ void Bridge::read_from_db() {
 uint Bridge::package_len() {
 	constexpr uint	pg_package_ = 1;
 	uint				len = 0;
-//		if (bufer.size() > 1 && !std::isalpha(bufer[0])) {
-//			len = uint(bufer.at(0) << 24) | (uint(bufer.at(1)) << 16) |
-//						 (uint(bufer.at(2)) << 8) | (uint(bufer.at(3)));
-//			return len;
-//		}
 	if (bufer_.size() > 1 && std::isalpha(bufer_[0])) {
 		len = (uint(bufer_[1]) << 24) | (uint(bufer_[2]) << 16) | (uint(bufer_[3]) << 8) | (uint8_t(bufer_[4])) + pg_package_;
 		return len;
@@ -96,7 +90,7 @@ uint Bridge::package_len() {
 
 void Bridge::logger() {
 	constexpr uint	not_logging_bytes = 6;
-	if (bufer_.at(0) == 'Q') {
+	if (bufer_.size() && bufer_.at(0) == 'Q') {
 		uint len = package_len() - not_logging_bytes;
 		if (len < bufer_.size()) {
 			std::string meta("-- QUERY SIZE: ");

@@ -78,6 +78,7 @@ void Server::create_client() {
 		}
 		fcntl(new_client_fd, F_SETFL, O_NONBLOCK);
 		bridges_.emplace_back(new Bridge(client_mask_, new_client_fd, logfile_));
+		std::cout << "Client was added!" << std::endl;
 	}
 }
 

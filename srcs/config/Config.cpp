@@ -3,6 +3,7 @@
 //
 
 #include "Config.hpp"
+#include <algorithm>
 
 Config::Config(const std::string &config_name) {
 	std::ifstream ifs(config_name);
