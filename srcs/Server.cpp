@@ -14,6 +14,7 @@ Server::Server(const Config &cfg) {
 
 Server::~Server() {
 	close(listen_fd_);
+	close(logfile_);
 }
 
 void Server::run_server() {
