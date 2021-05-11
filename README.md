@@ -2,7 +2,7 @@
 
 ## How to start:
 
-    Ip-addresses and ports client/server and logfile-path can be changed in config.txt (default placed in root directory). </br>
+    Ip-addresses and ports client/server and logfile-path can be changed in config.txt (default placed in root directory).
     Path to configuration-file can be given as second argument.
 ### Description:
 
